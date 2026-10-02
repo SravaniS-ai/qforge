@@ -13,10 +13,13 @@ QForge
 ├── Test Runner
 ├── Evaluators
 └── Results
-     │
-     │ tests
-     ▼
-Airline Rebooking Agent
+        │
+        │ tests
+        ▼
+System Under Test (SUT)
 │
-├── Flight Search
-└── Booking
+└── Airline Rebooking Agent
+     │
+     ├── Flight Search API
+     └── Booking API
+
