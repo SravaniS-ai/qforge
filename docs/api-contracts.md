@@ -1,21 +1,40 @@
-QForge API Contracts
+# QForge API Contracts
+
 This document defines how the Airline Rebooking Agent communicates with the airline APIs.
-1. Flight Search API
-Purpose
+
+---
+
+## 1. Flight Search API
+
+### Purpose
+
 The Flight Search API returns available flights for a requested route and travel date.
-Endpoint
+
+### Endpoint
+
+```text
 POST /flights/search
-Request
+```
+
+### Request
+
+```json
 {
   "origin": "DFW",
   "destination": "ORD",
   "travel_date": "2026-10-04"
 }
-Request Fields
-- origin — departure airport code
-- destination — arrival airport code
-- travel_date — requested travel date
-Success Response
+```
+
+### Request Fields
+
+- `origin` — departure airport code
+- `destination` — arrival airport code
+- `travel_date` — requested travel date
+
+### Success Response
+
+```json
 {
   "flights": [
     {
@@ -47,62 +66,112 @@ Success Response
     }
   ]
 }
-Responsibilities
+```
+
+### Responsibilities
+
 The Flight Search API:
+
 - searches available flights
 - returns route information
 - returns departure and arrival times
 - returns additional cost
 - returns seat availability
 - does not decide which flight is best for the passenger
-Example Error Response
+
+### Example Error Response
+
+```json
 {
   "error": "NO_FLIGHTS_FOUND",
   "message": "No flights were found for the requested route and date."
 }
-2. Booking API
-Purpose
+```
+
+---
+
+## 2. Booking API
+
+### Purpose
+
 The Booking API creates a booking for a passenger on a selected flight.
-Endpoint
+
+### Endpoint
+
+```text
 POST /bookings
-Request
+```
+
+### Request
+
+```json
 {
   "passenger_id": "P123",
   "flight_id": "F101"
 }
-Request Fields
-- passenger_id — identifies the passenger
-- flight_id — identifies the flight to book
-Success Response
+```
+
+### Request Fields
+
+- `passenger_id` — identifies the passenger
+- `flight_id` — identifies the flight to book
+
+### Success Response
+
+```json
 {
   "booking_id": "B9001",
   "passenger_id": "P123",
   "flight_id": "F101",
   "status": "CONFIRMED"
 }
-Responsibilities
+```
+
+### Responsibilities
+
 The Booking API:
+
 - validates that the flight exists
 - checks seat availability
 - creates the booking
 - returns booking confirmation
-Example Error: Flight Not Found
+
+### Example Error: Flight Not Found
+
+```json
 {
   "error": "FLIGHT_NOT_FOUND",
   "message": "Flight F999 does not exist."
 }
-Example Error: No Seats Available
+```
+
+### Example Error: No Seats Available
+
+```json
 {
   "error": "NO_SEATS_AVAILABLE",
   "message": "No seats are available for flight F101."
 }
-3. Responsibility Boundary
+```
+
+---
+
+## 3. Responsibility Boundary
+
 The APIs provide data and perform airline operations.
+
 The Rebooking Agent is responsible for applying passenger-specific rules.
+
 For QF-001:
+
+```text
 Destination = Chicago
 Arrival deadline <= 8:00 PM
 Additional cost <= $200
+```
+
 The Flight Search API does not apply these decision rules.
+
 The Booking API does not apply these decision rules.
+
 The Rebooking Agent evaluates the available flights and selects an eligible flight.
