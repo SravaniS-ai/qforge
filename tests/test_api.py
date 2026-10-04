@@ -55,3 +55,48 @@ def test_booking_invalid_flight():
     data = response.json()
 
     assert data["detail"]["error"] == "FLIGHT_NOT_FOUND"
+
+def test_rebook_endpoint():
+
+    response = client.post(
+        "/rebook",
+        json={
+            "passenger_id": "P123",
+            "origin": "DFW",
+            "destination": "ORD",
+            "travel_date": "2026-10-04",
+            "arrival_deadline": "20:00",
+            "max_additional_cost": 200,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "CONFIRMED"
+    assert data["selected_flight"]["flight_id"] == "F101"
+    assert data["booking"]["flight_id"] == "F101"
+    assert data["booking"]["status"] == "CONFIRMED"
+
+def test_rebook_endpoint_no_eligible_flight():
+
+    response = client.post(
+        "/rebook",
+        json={
+            "passenger_id": "P123",
+            "origin": "DFW",
+            "destination": "ORD",
+            "travel_date": "2026-10-04",
+            "arrival_deadline": "17:00",
+            "max_additional_cost": 100,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "NO_ELIGIBLE_FLIGHT"
+    assert data["selected_flight"] is None
+    assert data["booking"] is None

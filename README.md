@@ -1,6 +1,6 @@
 # QForge
 
-QForge is an AI Quality Engineering platform for testing AI-powered and agentic applications.
+git 
 
 The initial System Under Test is an Airline Disruption and Rebooking Agent.
 
