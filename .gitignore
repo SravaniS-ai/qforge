@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Pytest cache
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# VS Code local settings
+.vscode/
+
+# Environment / secrets
+.env
+.env.*
+
+# Coverage files
+.coverage
+htmlcov/
