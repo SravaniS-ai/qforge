@@ -14,4 +14,5 @@ class RebookingScenario(BaseModel):
     arrival_deadline: time
     max_additional_cost: float = Field(ge=0)
 
+    expected_status: str
     booking_required: bool = True

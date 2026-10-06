@@ -9,5 +9,6 @@ QF_001 = RebookingScenario(
     travel_date="2026-10-04",
     arrival_deadline="20:00",
     max_additional_cost=200,
+    expected_status="CONFIRMED",
     booking_required=True,
 )
