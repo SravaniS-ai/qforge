@@ -1,265 +1,409 @@
 # QForge Architecture
 
-## 1. System Boundary
+## 1. Purpose
 
-QForge is the AI Quality Engineering platform.
+QForge is an AI Quality Engineering platform used to evaluate the behavior of an AI-enabled system.
 
-The Airline Rebooking Agent is the System Under Test (SUT).
+The current System Under Test (SUT) is an Airline Rebooking Agent.
+
+QForge does not simply check whether the agent returns a plausible response. It verifies whether the agent's decisions satisfy business constraints and whether claimed actions actually occurred in system state.
+
+---
+
+## 2. High-Level Architecture
 
 ```text
-QForge
-│
-├── Test Scenario
-├── Test Runner
-├── Evaluators
-└── Results
+Executable Scenario
+        ↓
+QForge Runner
+        ↓
+System Under Test
+        ↓
+Observed Result
+        ↓
+QForge Evaluator
+        ↓
+Structured Evaluation Result
+        ↓
+PASS / FAIL
+```
 
-        │
-        │ tests
-        ▼
+The System Under Test currently contains:
 
-System Under Test (SUT)
-│
-└── Airline Rebooking Agent
-     │
-     ├── Flight Search API
-     └── Booking API
+```text
+FastAPI Layer
+      ↓
+Rebooking Agent
+      ↓
+Airline Services
+      ↓
+In-Memory System State
 ```
 
 ---
 
-## 2. Component Responsibilities
+## 3. System Boundary
 
-### Test Scenario
+### QForge owns
 
-Defines:
+- Scenario definitions
+- Expected outcomes
+- Scenario execution
+- Evaluation rules
+- PASS / FAIL decisions
+- Failure diagnostics
 
-- passenger situation
-- test input
-- business constraints
-- expected outcome
+### Airline Rebooking System owns
 
-Example:
+- Flight data
+- Flight search
+- Rebooking decisions
+- Booking creation
+- Booking state
+- API endpoints
 
-```text
-Destination: Chicago
-Arrival deadline: 8:00 PM
-Maximum additional cost: $200
-```
-
-### Test Runner
-
-The Test Runner:
-
-- loads a test scenario
-- sends the request to the Rebooking Agent
-- captures the agent response
-- captures API or tool calls
-- sends execution data to the evaluators
-
-### Evaluators
-
-Evaluators verify whether the AI agent behaved correctly.
-
-Examples:
-
-- Was the correct destination selected?
-- Was the arrival deadline satisfied?
-- Was the cost constraint satisfied?
-- Did the selected flight exist?
-- Was the Booking API called?
-- Were the correct arguments passed?
-- Was a booking actually created?
-- Does the final response match the actual system state?
-
-### Results
-
-Stores the final evaluation outcome.
-
-Initial statuses:
-
-```text
-PASS
-FAIL
-WARN
-```
+Keeping these responsibilities separate prevents test-specific behavior from leaking into the production system.
 
 ---
 
-## 3. Airline System Components
+## 4. Airline Rebooking System
+
+### API Layer
+
+File:
+
+```text
+airline_agent/main.py
+```
+
+Responsibilities:
+
+- Expose HTTP endpoints
+- Accept validated requests
+- Delegate work to services or agent logic
+- Return API responses
+
+The API layer should not contain core business logic.
+
+---
 
 ### Rebooking Agent
 
-The Rebooking Agent is the AI application being tested.
+File:
 
-Its responsibilities are:
+```text
+airline_agent/agents/rebooking_agent.py
+```
 
-1. Understand the passenger request.
-2. Call the Flight Search API.
-3. Review available flights.
-4. Apply passenger-specific constraints.
-5. Select an eligible flight.
-6. Call the Booking API.
-7. Return the result to the passenger.
+Responsibilities:
 
-### Flight Search API
+- Coordinate the rebooking workflow
+- Search available flights
+- Apply passenger constraints
+- Select an eligible flight
+- Request booking creation
 
-The Flight Search API:
+Current implementation is deterministic and rule-based.
 
-- searches available flights
-- returns route information
-- returns departure and arrival times
-- returns additional cost
-- returns seat availability
-
-It does not decide which flight is best for the passenger.
-
-### Booking API
-
-The Booking API:
-
-- validates that the flight exists
-- checks seat availability
-- creates the booking
-- returns booking confirmation
-
-It does not decide whether the selected flight satisfies passenger preferences.
+This deterministic baseline gives QForge a known reference behavior before introducing LLM-based decision making later.
 
 ---
 
-## 4. Initial Data Flow
+### Airline Service Layer
+
+File:
 
 ```text
-Test Scenario
-     │
-     ▼
-QForge Test Runner
-     │
-     ▼
-Rebooking Agent
-     │
-     ▼
-Flight Search API
-     │
-     ▼
-Available Flights
-     │
-     ▼
-Rebooking Agent
-     │
-     │ applies passenger constraints
-     ▼
-Booking API
-     │
-     ▼
-Booking Confirmation
-     │
-     ▼
-Rebooking Agent
-     │
-     ▼
-Agent Response
-     │
-     ▼
-QForge Evaluators
-     │
-     ▼
-PASS / FAIL / WARN
+airline_agent/services/airline_service.py
 ```
+
+Responsibilities:
+
+- Search flights
+- Validate requested flights
+- Create bookings
+- Maintain temporary in-memory system state
+
+Current state is represented using:
+
+```python
+FLIGHTS = [...]
+BOOKINGS = []
+```
+
+This is intentionally temporary.
+
+Later versions will place persistence behind a repository or database abstraction.
 
 ---
 
-## 5. QF-001 Example
+### Models
 
-Passenger requirements:
-
-```text
-Destination: Chicago
-Arrival deadline: 8:00 PM
-Maximum additional cost: $200
-```
-
-Available flights:
+Location:
 
 ```text
-F101 -> Chicago -> 6:30 PM -> $120
-F102 -> Chicago -> 9:00 PM -> $80
-F103 -> Chicago -> 7:15 PM -> $250
+airline_agent/models/
 ```
 
-The Rebooking Agent should select:
+Responsibilities:
 
-```text
-F101
-```
+- Define request and response contracts
+- Validate data using Pydantic
+- Provide consistent data structures between layers
 
-because:
+Examples:
 
-```text
-F101
-Arrival before 8 PM: YES
-Cost <= $200: YES
-Eligible: YES
-
-F102
-Arrival before 8 PM: NO
-Eligible: NO
-
-F103
-Arrival before 8 PM: YES
-Cost <= $200: NO
-Eligible: NO
-```
+- `Flight`
+- `FlightSearchRequest`
+- `BookingRequest`
+- `BookingResponse`
+- `RebookingRequest`
+- `RebookingResult`
 
 ---
 
-## 6. Key Design Principle
+## 5. QForge Platform
 
-QForge validates what the AI system actually did, not only what the AI system said.
+### Scenarios
+
+Location:
+
+```text
+qforge/scenarios/
+```
+
+A scenario is a machine-readable executable requirement.
+
+A scenario contains:
+
+- Test input
+- Passenger constraints
+- Expected system outcome
 
 Example:
 
 ```text
-Agent response:
-"Your flight has been successfully booked."
+QF-001
 
-Actual system state:
-No booking exists.
+Origin: DFW
+Destination: ORD
+Arrival deadline: 20:00
+Maximum additional cost: $200
 
-QForge result:
-FAIL
+Expected status:
+CONFIRMED
+
+Booking required:
+True
+```
+
+Current scenarios include:
+
+- `QF-001` — successful rebooking
+- `QF-002` — no flight meets arrival deadline
+- `QF-003` — no flight meets budget constraint
+
+---
+
+### QForge Runner
+
+File:
+
+```text
+qforge/runner.py
+```
+
+Responsibilities:
+
+- Accept a QForge scenario
+- Convert it into an SUT request
+- Execute the rebooking workflow
+- Capture the observed result
+
+The runner executes behavior.
+
+It does not decide whether that behavior is correct.
+
+---
+
+### QForge Evaluator
+
+Location:
+
+```text
+qforge/evaluators/
+```
+
+Responsibilities:
+
+- Compare expected behavior with observed behavior
+- Validate business constraints
+- Validate system state
+- Produce structured diagnostics
+- Determine overall PASS / FAIL
+
+Current checks include:
+
+```text
+status
+destination
+arrival_deadline
+cost_constraint
+booking_created
+booking_matches_selected_flight
+```
+
+For scenarios where no eligible flight is expected, the evaluator instead verifies:
+
+```text
+status
+no_flight_selected
+no_booking_created
 ```
 
 ---
 
-## 7. Current Scope
+## 6. Expected vs Observed
 
-Month 1 is intentionally simple.
-
-Current technologies:
+The core evaluation pattern is:
 
 ```text
-Python
-FastAPI
-Pydantic
-Pytest
-Mock Airline APIs
-JSON Results
-Git / GitHub
+Expected behavior
+        vs
+Observed behavior
 ```
 
-Deferred until later:
+Examples:
 
 ```text
-PostgreSQL
-Redis
-Background Workers
-Celery
-Kafka
-AWS
-Distributed Processing
-Kubernetes
-Advanced Observability
+Expected destination
+vs
+Selected flight destination
 ```
 
-These will be introduced when QForge develops a real architectural need for them.
+```text
+Expected arrival deadline
+vs
+Selected flight arrival time
+```
+
+```text
+Expected maximum cost
+vs
+Selected flight additional cost
+```
+
+---
+
+## 7. State Verification
+
+QForge does not trust agent output alone.
+
+For example:
+
+```text
+Agent claims:
+Booking B9001 was created
+```
+
+QForge also checks:
+
+```text
+Actual booking state:
+Does B9001 really exist?
+```
+
+If the agent claims a booking exists but the system state does not contain that booking:
+
+```text
+booking_created = FAIL
+```
+
+This is important for validating AI agents that may produce plausible output without successfully completing the real action.
+
+---
+
+## 8. Fault Injection
+
+QForge is tested using deliberately faulty agent results.
+
+Current injected defects include:
+
+```text
+Late flight
+→ arrival_deadline FAIL
+
+Over-budget flight
+→ cost_constraint FAIL
+
+Fake booking
+→ booking_created FAIL
+
+Selected flight differs from booked flight
+→ booking_matches_selected_flight FAIL
+
+Unexpected agent status
+→ status FAIL
+```
+
+Each fault-injection test attempts to isolate one defect so QForge can prove that it fails for the correct reason.
+
+---
+
+## 9. Test Isolation
+
+Booking state is currently stored in a global in-memory list.
+
+Pytest uses an automatic fixture to clear booking state before and after each test.
+
+This prevents one test from affecting another.
+
+```text
+Test A
+→ clean state
+→ execute
+→ cleanup
+
+Test B
+→ clean state
+→ execute
+→ cleanup
+```
+
+---
+
+## 10. Current Technology Stack
+
+- Python
+- FastAPI
+- Pydantic
+- Pytest
+- Uvicorn
+- HTTPX
+- Git
+- GitHub
+
+---
+
+## 11. Deferred Architecture
+
+The following technologies are intentionally not part of the first version:
+
+- PostgreSQL
+- Redis
+- Kafka
+- Celery
+- Background workers
+- Distributed workers
+- Docker/Kubernetes
+- AWS infrastructure
+
+These will be introduced only when QForge develops requirements that justify them.
+
+---
+
+## 12. Current Architecture Principle
+
+Build the simplest architecture that correctly solves the current problem.
+
+Add complexity only when a real requirement creates the need for it.
