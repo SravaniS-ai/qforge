@@ -407,3 +407,43 @@ These will be introduced only when QForge develops requirements that justify the
 Build the simplest architecture that correctly solves the current problem.
 
 Add complexity only when a real requirement creates the need for it.
+
+## Known Limitations and Technical Debt
+
+### Direct Booking-State Coupling
+
+The QForge rebooking evaluator currently imports the airline system's in-memory `BOOKINGS` list directly to verify whether a claimed booking actually exists.
+
+This is acceptable for the current local prototype, but it creates coupling between QForge and the internal storage implementation of the System Under Test.
+
+Current design:
+
+```text
+QForge Evaluator
+        ↓
+direct access
+        ↓
+BOOKINGS list
+```
+
+Future design:
+
+```text
+QForge Evaluator
+        ↓
+State Verification Interface
+        ↓
+Booking Repository / API
+        ↓
+Persistent System State
+```
+
+This abstraction will be introduced when the project moves from in-memory state to persistent storage.
+
+### Growing Evaluator Complexity
+
+`evaluate_rebooking()` currently handles multiple evaluation paths, including successful rebooking and no-eligible-flight scenarios.
+
+As additional scenario types and evaluation rules are introduced, individual checks should be extracted into reusable evaluator components rather than allowing one function to continue growing.
+
+This refactoring will be introduced when the number of evaluation rules creates a genuine maintainability need.

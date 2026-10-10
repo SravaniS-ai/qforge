@@ -1,17 +1,36 @@
 import pytest
+
+from airline_agent.models.booking import (
+    BookingRequest,
+    BookingResponse,
+)
+from airline_agent.models.flight import Flight
+from airline_agent.models.rebooking import RebookingResult
+from airline_agent.services.airline_service import (
+    FLIGHTS,
+    create_booking,
+)
+
 from qforge.evaluators.rebooking_evaluator import evaluate_rebooking
 from qforge.runner import QForgeRunner
 from qforge.scenarios.qf_001 import QF_001
 from qforge.scenarios.qf_002 import QF_002
 from qforge.scenarios.qf_003 import QF_003
-from airline_agent.models.booking import BookingResponse
-from airline_agent.models.flight import Flight
-from airline_agent.models.rebooking import RebookingResult
-from airline_agent.models.booking import BookingRequest
-from airline_agent.services.airline_service import (
-    FLIGHTS,
-    create_booking,
-)
+
+def get_flight(flight_id: str):
+    """
+    Return a known test flight from the temporary airline flight store.
+
+    Fault-injection tests use specific flights to create controlled
+    defects. Keeping flight lookup in one helper makes those tests
+    easier to read and avoids repeating search logic.
+    """
+
+    return next(
+        flight
+        for flight in FLIGHTS
+        if flight.flight_id == flight_id
+    )
 
 def assert_only_check_failed(evaluation, expected_failed_check):
     """
@@ -101,11 +120,7 @@ def test_qforge_evaluator_detects_late_flight():
 
     # F102 is a real DFW -> ORD flight, but it arrives at 21:00.
     # QF-001 requires arrival by 20:00, so selecting F102 is wrong.
-    late_flight = next(
-        flight
-        for flight in FLIGHTS
-        if flight.flight_id == "F102"
-    )
+    late_flight = get_flight("F102")
 
     # Create a REAL booking in system state.
     #
@@ -156,11 +171,7 @@ def test_qforge_evaluator_detects_over_budget_flight():
     # but its additional cost is $250.
     #
     # QF-001 allows a maximum additional cost of $200.
-    expensive_flight = next(
-        flight
-        for flight in FLIGHTS
-        if flight.flight_id == "F103"
-    )
+    expensive_flight = get_flight("F103")
 
     # Create a REAL booking so booking verification itself succeeds.
     # We want QForge to fail because of cost, not because of
@@ -206,11 +217,7 @@ def test_qforge_evaluator_detects_booking_mismatch():
 
     # F101 is a valid flight for QF-001 and will be presented as
     # the flight the agent claims to have selected.
-    selected_flight = next(
-        flight
-        for flight in FLIGHTS
-        if flight.flight_id == "F101"
-    )
+    selected_flight = get_flight("F101")
 
     # Create a REAL booking for a different flight.
     #
