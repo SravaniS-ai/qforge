@@ -1,10 +1,17 @@
 from airline_agent.models.rebooking import RebookingResult
 from airline_agent.services.airline_service import BOOKINGS
 
-from qforge.evaluators.models import (
-    EvaluationCheck,
-    EvaluationResult,
+from qforge.evaluators.checks import (
+    build_booking_created_check,
+    evaluate_arrival_deadline,
+    evaluate_booking_match,
+    evaluate_cost_constraint,
+    evaluate_destination,
+    evaluate_no_booking_created,
+    evaluate_no_flight_selected,
+    evaluate_status,
 )
+from qforge.evaluators.models import EvaluationResult
 from qforge.scenarios.models import RebookingScenario
 
 
@@ -12,88 +19,56 @@ def evaluate_rebooking(
     scenario: RebookingScenario,
     result: RebookingResult,
 ) -> EvaluationResult:
+    """
+    Evaluate the observed rebooking result against the behavior
+    expected by a QForge scenario.
+
+    This function now acts mainly as an orchestration layer:
+    it decides which reusable checks apply to the scenario,
+    collects their results, and calculates the overall status.
+    """
 
     checks = []
 
-    # 1. Status check
-    status_passed = result.status == scenario.expected_status
-
+    # Every scenario should first confirm that the SUT returned
+    # the high-level status expected by the executable scenario.
     checks.append(
-        EvaluationCheck(
-            name="status",
-            status="PASS" if status_passed else "FAIL",
-            reason=(
-                "Agent returned the expected status."
-                if status_passed
-                else (
-                    f"Expected status {scenario.expected_status}, "
-                    f"but received {result.status}."
-                )
-            ),
+        evaluate_status(
+            scenario=scenario,
+            result=result,
         )
     )
 
-    # Successful rebooking scenario
+    # Successful rebooking scenarios require validation of the
+    # selected flight, business constraints, and booking state.
     if scenario.expected_status == "CONFIRMED":
 
-        selected_flight = result.selected_flight
-
-        # 2. Destination check
-        destination_passed = (
-            selected_flight is not None
-            and selected_flight.destination == scenario.destination
-        )
-
         checks.append(
-            EvaluationCheck(
-                name="destination",
-                status="PASS" if destination_passed else "FAIL",
-                reason=(
-                    "Selected flight has the correct destination."
-                    if destination_passed
-                    else "Selected flight destination is incorrect or missing."
-                ),
+            evaluate_destination(
+                scenario=scenario,
+                result=result,
             )
         )
 
-        # 3. Arrival deadline check
-        arrival_passed = (
-            selected_flight is not None
-            and selected_flight.arrival_time <= scenario.arrival_deadline
-        )
-
         checks.append(
-            EvaluationCheck(
-                name="arrival_deadline",
-                status="PASS" if arrival_passed else "FAIL",
-                reason=(
-                    "Selected flight arrives within the deadline."
-                    if arrival_passed
-                    else "Selected flight arrives after the deadline or is missing."
-                ),
+            evaluate_arrival_deadline(
+                scenario=scenario,
+                result=result,
             )
         )
 
-        # 4. Cost check
-        cost_passed = (
-            selected_flight is not None
-            and selected_flight.additional_cost
-            <= scenario.max_additional_cost
-        )
-
         checks.append(
-            EvaluationCheck(
-                name="cost_constraint",
-                status="PASS" if cost_passed else "FAIL",
-                reason=(
-                    "Selected flight satisfies the cost constraint."
-                    if cost_passed
-                    else "Selected flight exceeds the allowed cost or is missing."
-                ),
+            evaluate_cost_constraint(
+                scenario=scenario,
+                result=result,
             )
         )
 
-        # 5. Booking actually exists
+        # Temporary state verification.
+        #
+        # QForge still reads the SUT's in-memory BOOKINGS list
+        # directly. This is known technical debt and will later
+        # be replaced by a state-verification abstraction.
         booking_exists = False
 
         if result.booking is not None:
@@ -103,67 +78,35 @@ def evaluate_rebooking(
             )
 
         checks.append(
-            EvaluationCheck(
-                name="booking_created",
-                status="PASS" if booking_exists else "FAIL",
-                reason=(
-                    "Booking exists in actual system state."
-                    if booking_exists
-                    else "Agent reported a booking, but no matching booking exists."
-                ),
+            build_booking_created_check(
+                booking_exists=booking_exists,
             )
-        )
-
-        # 6. Booking matches selected flight
-        booking_matches_flight = (
-            selected_flight is not None
-            and result.booking is not None
-            and result.booking.flight_id == selected_flight.flight_id
         )
 
         checks.append(
-            EvaluationCheck(
-                name="booking_matches_selected_flight",
-                status="PASS" if booking_matches_flight else "FAIL",
-                reason=(
-                    "Booked flight matches the selected flight."
-                    if booking_matches_flight
-                    else "Booked flight does not match the selected flight."
-                ),
+            evaluate_booking_match(
+                result=result,
             )
         )
 
-    # No eligible flight scenario
+    # When no valid rebooking is expected, the correct behavior
+    # is to avoid selecting a flight and avoid creating a booking.
     elif scenario.expected_status == "NO_ELIGIBLE_FLIGHT":
 
-        no_selected_flight = result.selected_flight is None
-
         checks.append(
-            EvaluationCheck(
-                name="no_flight_selected",
-                status="PASS" if no_selected_flight else "FAIL",
-                reason=(
-                    "No flight was selected, as expected."
-                    if no_selected_flight
-                    else "A flight was selected when none should have been."
-                ),
+            evaluate_no_flight_selected(
+                result=result,
             )
         )
 
-        no_booking = result.booking is None
-
         checks.append(
-            EvaluationCheck(
-                name="no_booking_created",
-                status="PASS" if no_booking else "FAIL",
-                reason=(
-                    "No booking was created, as expected."
-                    if no_booking
-                    else "A booking was created when none should have been."
-                ),
+            evaluate_no_booking_created(
+                result=result,
             )
         )
 
+    # The overall scenario passes only when every individual
+    # evaluation rule passes.
     overall_status = (
         "PASS"
         if all(check.status == "PASS" for check in checks)
