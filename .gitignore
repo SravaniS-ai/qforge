@@ -21,3 +21,6 @@ __pycache__/
 # Coverage files
 .coverage
 htmlcov/
+
+# Generated QForge execution results
+results/*.json
